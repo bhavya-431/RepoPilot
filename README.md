@@ -1,137 +1,240 @@
 # RepoPilot — Autonomous Software Engineering Agent
 
 <p align="center">
-  <strong>Grounded Bug Investigation • Surgical Patch Review • Controlled Test Verification • Bounded Self-Repair</strong>
+  <strong>Grounded Bug Investigation · Surgical Patch Review · Controlled Test Verification · Bounded Self-Repair</strong>
+</p>
+
+<p align="center">
+  An AI-assisted code repair system that investigates bugs, proposes patches, and verifies changes while keeping developers in control.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-Backend-blue?logo=python" alt="Python" />
+  <img src="https://img.shields.io/badge/FastAPI-API-009688?logo=fastapi" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/React-Frontend-61DAFB?logo=react" alt="React" />
+  <img src="https://img.shields.io/badge/TypeScript-UI-3178C6?logo=typescript" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/Ollama-Local%20LLM-black" alt="Ollama" />
+  <img src="https://img.shields.io/badge/Tests-28%20passed-success" alt="28 tests passed" />
 </p>
 
 ---
 
-## 🚀 Overview
-**RepoPilot** is an autonomous, free, local-first AI Software Engineering Agent. Powered by a local Ollama daemon using open-weights models (`gemma4:latest`), RepoPilot investigates bugs, inspects code evidence, synthesizes unified patches, requires explicit developer approval, and executes regression tests within an isolated sandbox.
+## Overview
+
+**RepoPilot** is a free, local-first AI software engineering agent designed to help developers investigate bugs, inspect relevant code evidence, generate candidate patches, review proposed changes, and verify repairs through automated tests.
+
+It uses a local Ollama model (`gemma4:latest`) and a FastAPI backend, paired with a React and TypeScript frontend. Its workflow combines evidence-grounded investigation, unified diff review, explicit developer approval, and bounded repair iterations.
+
+Unlike a workflow that blindly applies generated code, RepoPilot keeps the developer involved before changes are applied to the original repository.
+
+**Core principle: AI proposes. Developers approve. Tests verify.**
+
+## Core Highlights
+
+### 1. Free and Local-First
+
+- Uses a locally hosted Ollama model for inference.
+- Avoids mandatory paid cloud AI API calls in the configured local workflow.
+- Keeps the application suitable for local development and experimentation.
+- Does not require a cloud-hosted LLM account for local inference.
+
+### 2. Evidence Before Hypotheses
+
+- Inspects relevant repository files and code sections.
+- Uses code evidence to support bug investigation.
+- Provides structured investigation results for review.
+- Helps developers trace a diagnosis back to the relevant source code.
+
+### 3. Explicit Human Approval
+
+- Presents candidate changes as unified diffs.
+- Makes additions and deletions visible before application.
+- Requires explicit developer approval before applying a proposed repair.
+- Detects source-file conflicts when the relevant file changes after a patch is proposed.
+
+### 4. Controlled Test Execution
+
+- Supports allowlisted pytest execution.
+- Applies subprocess timeouts and output-size limits.
+- Reports test results for verification.
+- Includes repository path validation and test-target traversal defenses.
+
+> **Security note:** Application-level controls and subprocess timeouts are not equivalent to an operating-system sandbox. RepoPilot is intended for trusted local repositories only.
+
+### 5. Bounded Self-Repair
+
+- Supports a repair workflow with a maximum of two repair attempts.
+- Tests repair candidates in a temporary repository copy before applying an accepted candidate to the original repository.
+- Requires explicit approval before applying a repair.
+- Maintains repair status and audit information for verification.
 
 ---
 
-## ✨ Core Highlights & Principles
+## Architecture
 
-1. **Free & Local-First:** Runs 100% locally with zero cloud API keys or token costs.
-2. **Evidence Before Hypotheses:** Extracts actual code slices and requires verifiable line-range citations for every claim.
-3. **Explicit Human Approval:** Patches are presented as clear unified diffs (`+N / -M`). Zero code is committed without developer sign-off.
-4. **Controlled Execution Sandbox:** Only allowlisted `pytest` commands are permitted. Subprocesses have strict timeouts and output caps.
-5. **Bounded Repair Loop:** Halts strictly after a maximum of 2 repair attempts with an immutable audit trail and exportable verification report.
+RepoPilot separates its user interface, repository investigation, patch generation, test execution, and repair orchestration into distinct components.
 
----
-
-## 🛠️ Architecture
-
+```mermaid
+flowchart TD
+    A[React + TypeScript Frontend] --> B[FastAPI Backend]
+    B --> C[Repository Inspection]
+    B --> D[Evidence-Based Investigation]
+    D --> E[Local Ollama LLM]
+    E --> F[Candidate Patch Generation]
+    F --> G[Unified Diff Review]
+    G --> H{Developer Approval}
+    H -- Reject --> I[Keep Original Unchanged]
+    H -- Approve --> J[Apply Candidate Patch]
+    J --> K[Run Regression Tests]
+    K --> L[Verification Results]
+    L --> M[Repair Audit]
 ```
+
+### Project Structure
+
+```text
 RepoPilot/
-├── backend/                  # FastAPI Application
+├── backend/
 │   ├── app/
-│   │   ├── main.py           # REST API router & dependency injection
-│   │   ├── repository.py     # Safe tree exploration & lexical code search
-│   │   ├── security.py       # Path traversal checks & boundary verification
-│   │   ├── llm.py            # BaseLLMProvider, OllamaProvider, MockLLMProvider
-│   │   ├── investigator.py   # Grounded evidence extraction & diagnosis
-│   │   ├── patcher.py        # Unified diff generator & conflict detector
-│   │   ├── runner.py         # Subprocess test runner with timeout & output caps
-│   │   ├── repair.py         # Bounded repair loop & audit trail orchestrator
-│   │   └── schemas.py        # Pydantic v2 data models
-│   └── tests/                # 19 automated pytest unit & security tests
-├── frontend/                 # React 19 + TypeScript + Vite UI
-│   ├── src/
-│   │   ├── App.tsx           # Multi-phase workspace shell & navigation tabs
-│   │   ├── api.ts            # Typed REST client
-│   │   ├── index.css         # Developer-first dark design system
-│   │   └── components/
-│   │       ├── CodeViewer.tsx        # Line-numbered syntax viewer
-│   │       ├── FileTree.tsx          # Hierarchical folder tree
-│   │       ├── SearchOverlay.tsx     # Fast symbol search
-│   │       ├── InvestigationPanel.tsx# Diagnosis & evidence cards
-│   │       ├── DiffViewer.tsx        # Unified patch review & approval
-│   │       ├── TestRunnerPanel.tsx   # Sandbox test runner & terminal logs
-│   │       └── RepairAuditPanel.tsx  # Iteration timeline & report export
+│   │   ├── main.py             # REST API and dependency wiring
+│   │   ├── repository.py       # Repository exploration and code search
+│   │   ├── security.py         # Path validation and boundary checks
+│   │   ├── llm.py              # LLM provider abstractions
+│   │   ├── investigator.py     # Evidence extraction and diagnosis
+│   │   ├── patcher.py          # Unified diff generation and validation
+│   │   ├── runner.py           # Test subprocess execution
+│   │   ├── repair.py           # Bounded repair orchestration and audit
+│   │   └── schemas.py          # Pydantic data models
+│   └── tests/                  # Backend unit, security, and integration tests
+├── frontend/
+│   └── src/
+│       ├── App.tsx             # Main workspace and navigation
+│       ├── api.ts              # Typed REST API client
+│       ├── index.css           # Application styling
+│       └── components/
+│           ├── CodeViewer.tsx
+│           ├── FileTree.tsx
+│           ├── SearchOverlay.tsx
+│           ├── InvestigationPanel.tsx
+│           ├── DiffViewer.tsx
+│           ├── TestRunnerPanel.tsx
+│           └── RepairAuditPanel.tsx
 ├── benchmarks/
-│   └── sample_repo/          # Reproducible Python benchmark with known bug
-└── docs/                     # Full technical documentation suite
-    ├── ARCHITECTURE.md       # Subsystem breakdowns & Mermaid diagrams
-    ├── LEARNING_GUIDE.md     # Technical interview & architecture deep-dive
-    ├── API_REFERENCE.md      # OpenAPI endpoints & payload documentation
-    ├── SECURITY.md           # Defensive design & threat model
-    ├── DECISIONS.md          # Architecture Decision Records (ADRs)
-    └── RECOVERY_REPORT.md    # Crash recovery & verification audit
+│   └── sample_repo/            # Sample repository and regression tests
+├── docs/
+│   ├── API_REFERENCE.md
+│   ├── ARCHITECTURE.md
+│   ├── DECISIONS.md
+│   ├── FINAL_ACCEPTANCE_REPORT.md
+│   ├── IMPLEMENTATION_PLAN.md
+│   ├── LEARNING_GUIDE.md
+│   ├── PRD.md
+│   ├── RECOVERY_REPORT.md
+│   └── SECURITY.md
+├── .gitignore
+├── README.md
+└── RepoPilot_PRD.md
 ```
 
----
+Individual filenames may evolve as the project develops. The structure above describes the principal components of the application.
 
-## ⚡ Quickstart
+## Technology Stack
+
+| Component | Technology |
+|---|---|
+| Frontend framework | React |
+| Programming language | TypeScript |
+| Frontend tooling | Vite |
+| Styling | CSS |
+| Backend framework | FastAPI |
+| Backend language | Python |
+| Data validation | Pydantic |
+| Local LLM runtime | Ollama |
+| Configured model | `gemma4:latest` |
+| Automated testing | pytest |
+| Version control | Git and GitHub |
+
+## Quickstart
+
+The following commands use Windows PowerShell and assume you have cloned the repository.
 
 ### Prerequisites
-- Python 3.11+
-- Node.js v18+ & npm
-- [Ollama](https://ollama.com/) with `gemma4:latest` (or any local GGUF model)
 
-### 1. Start Ollama Daemon
+- Python with versions compatible with the backend dependencies.
+- Node.js and npm.
+- Git.
+- [Ollama](https://ollama.com/).
+- Sufficient local system resources to run the selected LLM.
+
+The project was tested on Windows 11 with Python 3.14.4 and `gemma4:latest`. Other environments may require dependency or configuration adjustments.
+
+### 1. Clone the repository
+
+```powershell
+git clone https://github.com/bhavya-431/RepoPilot.git
+cd RepoPilot
+```
+
+### 2. Download and start the local model
+
+Download the configured model:
+
+```powershell
+ollama pull gemma4:latest
+```
+
+Verify that it is available:
+
+```powershell
+ollama list
+```
+
+Ensure the Ollama service is running. If it is not already running, start it using your operating system's Ollama application or service.
+
+You can test the model directly with:
+
 ```powershell
 ollama run gemma4:latest
 ```
 
-### 2. Start Backend API
+Keep Ollama available while using RepoPilot, and exit the interactive model session when finished testing it if needed.
+
+### 3. Install backend dependencies
+
+From the repository root:
+
 ```powershell
-# In RepoPilot root:
+cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+Return to the repository root:
+
+```powershell
+cd ..
+```
+
+If your PowerShell execution policy prevents virtual-environment activation, use an approved alternative for your local Python environment.
+
+### 4. Configure and start the backend
+
+From the repository root, activate the backend virtual environment and configure the import path:
+
+```powershell
+.\backend\.venv\Scripts\Activate.ps1
 $env:PYTHONPATH="backend"
-# Optional: customize CORS origins (defaults to localhost:5173, 127.0.0.1:5173, localhost:3000)
-# $env:REPO_PILOT_CORS_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
-uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
-API Docs: `http://localhost:8000/docs`
 
-### 3. Start Frontend UI
-```powershell
-cd frontend
-npm install
-# Optional: customize backend API URL (defaults to http://localhost:8000/api)
-# $env:VITE_API_URL="http://localhost:8000/api"
-npm run dev
-```
-Open `http://localhost:5173` in your browser.
-
----
-
-## 🔒 Security Architecture & Boundaries
-
-### 1. Workspace Boundary Validation vs. OS-Level Sandbox
-- **Path Resolution:** All target filepaths and test targets are resolved through `resolve_safe_path()`, preventing directory traversal across both Windows (`..\\`, `C:`, UNC shares) and POSIX (`../`, `/etc/`).
-- **Subprocess Execution Limitation:** `pytest` is executed within the designated repository directory with strict timeouts (default 30s) and stdout/stderr truncation (64KB). **Important:** Running pytest executes Python code directly. A subprocess runner is **not an OS-level sandbox** or container; Python tests can execute arbitrary system calls. RepoPilot is designed for **trusted local repositories** only. It should **not** be exposed as a public unauthenticated web service.
-
-### 2. Patch Approval & Mutation Safety
-- **Manual Patch Workflow:** Candidate diffs are previewed in the Patch Review UI. Original source files remain untouched until explicit developer approval (`POST /api/patches/{patch_id}/approve`).
-- **Automated Repair Workflow:** During multi-turn repair sessions (`/api/repair/{session_id}/iterate`), candidate fixes are tested strictly inside an **isolated temporary directory clone**. The original repository is never modified silently. Once a candidate passes all tests, the developer reviews the diff and explicitly applies the fix (`POST /api/repair/{session_id}/apply` or UI Approve).
-- **Conflict Detection:** If the target source file has been modified externally since patch proposal generation, application is rejected with a conflict error.
-
-### 3. API Exposure & CORS
-- The backend restricts allowed origins to `REPO_PILOT_CORS_ORIGINS` (defaulting to local Vite dev servers: `http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000`).
-- Credentials are supported with explicit origin validation.
-
----
-
-## 🧪 Running the Verification Test Suite
-
-RepoPilot includes 28 comprehensive unit, security, and integration tests across all subsystems:
+Optionally configure allowed frontend origins:
 
 ```powershell
-$env:PYTHONPATH="backend"
-python -m pytest backend/tests -v
+$env:REPO_PILOT_CORS_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
 ```
 
-All 28 tests pass 100%:
-- `test_repository.py` (File tree, safe slicing, cross-platform traversal prevention, Windows drive & UNC blocking, lexical search)
-- `test_investigation.py` (Evidence extraction, mock & live inference schemas)
-- `test_llm.py` (Ollama provider options, truncation safeguards, error diagnostics)
-- `test_patcher.py` (Unified diffs, approval workflow, conflict detection, investigation-to-patch pipeline, logic validation)
-- `test_runner.py` (Subprocess timeout caps, output bounds, test target traversal defense, pytest summary parser)
-- `test_repair.py` (Isolated candidate sandbox testing, repo preservation, explicit approval apply, rejected patch safety, bounded retry ceiling, audit logging)
+Start the API:
 
----
-
-## 📄 License
-MIT License.
+```powershell
+uvicorn app.main:app --host 127
