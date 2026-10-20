@@ -114,7 +114,7 @@ export function RepairAuditPanel({
       {/* Main Grid: Iteration Timeline on Left, Audit Report on Right */}
       <div style={{ display: 'grid', gridTemplateColumns: '420px 1fr', flex: 1, minHeight: 0, overflow: 'hidden' }}>
         {/* Iteration Timeline */}
-        <div style={{ borderRight: '1px solid var(--border-color)', padding: '1.25rem 1.25rem 2rem 1.25rem', overflowY: 'auto' }}>
+        <div style={{ borderRight: '1px solid var(--border-color)', padding: '1.25rem 1.25rem 2rem 1.25rem', overflowY: 'auto', minHeight: 0, boxSizing: 'border-box' }}>
           <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', marginBottom: '0.75rem' }}>
             Repair Iterations
           </div>
@@ -204,7 +204,7 @@ export function RepairAuditPanel({
         </div>
 
         {/* Audit & Verification Report View */}
-        <div style={{ flex: 1, padding: '1.25rem 1.25rem 2rem 1.25rem', overflowY: 'auto' }}>
+        <div style={{ flex: 1, minHeight: 0, padding: '1.25rem 1.25rem 2rem 1.25rem', overflowY: 'auto', boxSizing: 'border-box' }}>
           {report ? (
             <div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>

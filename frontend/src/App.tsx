@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { api, type RepoInfo, type FileTreeNode, type FileContent, type SearchResultItem, type InvestigationResponse, type SystemStatus, type PatchProposalResponse } from './api';
+import { api, BACKEND_ROOT, type RepoInfo, type FileTreeNode, type FileContent, type SearchResultItem, type InvestigationResponse, type SystemStatus, type PatchProposalResponse } from './api';
 import { FileTreeItem } from './components/FileTree';
 import { CodeViewer } from './components/CodeViewer';
 import { SearchOverlay } from './components/SearchOverlay';
@@ -553,7 +553,7 @@ export function App() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.8rem', color: '#9ca3af' }}>
               <span>Phase 1: Repository Explorer</span>
               <a
-                href="http://localhost:8000/docs"
+                href={`${BACKEND_ROOT}/docs`}
                 target="_blank"
                 rel="noreferrer"
                 style={{ color: '#3b82f6', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
@@ -566,8 +566,8 @@ export function App() {
           {/* Code Viewer, Investigation View, or Patch Review View */}
           <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
             {activeTab === 'investigate' ? (
-              <div style={{ display: 'grid', gridTemplateColumns: '440px 1fr', width: '100%', height: '100%' }}>
-                <div style={{ borderRight: '1px solid var(--border-color)', overflowY: 'auto' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '440px 1fr', width: '100%', height: '100%', minHeight: 0 }}>
+                <div style={{ borderRight: '1px solid var(--border-color)', overflowY: 'auto', minHeight: 0, boxSizing: 'border-box' }}>
                   <InvestigationPanel
                     repoId={currentRepo?.repo_id || null}
                     onSelectEvidence={handleSelectEvidence}
@@ -579,7 +579,7 @@ export function App() {
                     error={investigationError}
                   />
                 </div>
-                <div style={{ height: '100%', minWidth: 0 }}>
+                <div style={{ height: '100%', minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                   <CodeViewer
                     content={fileContent}
                     loading={fileLoading}

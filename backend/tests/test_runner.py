@@ -43,13 +43,23 @@ def test_security_disallows_path_traversal():
     assert reg_resp.status_code == 200
     repo_id = reg_resp.json()["repo_id"]
 
+    # Traversal attempt with ../
     run_req = {
         "repo_id": repo_id,
         "test_target": "../../backend/tests/test_repository.py",
     }
-    # Path with .. gets sanitized or rejected
     resp = client.post("/api/tests/run", json=run_req)
-    assert resp.status_code in (403, 404)
+    assert resp.status_code == 403
+    assert "traversal" in resp.json()["detail"].lower()
+
+    # Traversal attempt with Windows-style backslashes
+    run_req_win = {
+        "repo_id": repo_id,
+        "test_target": "..\\..\\sensitive.py",
+    }
+    resp_win = client.post("/api/tests/run", json=run_req_win)
+    assert resp_win.status_code == 403
+    assert "traversal" in resp_win.json()["detail"].lower()
 
 
 def test_test_runner_timeout_handling(tmp_path):

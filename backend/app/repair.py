@@ -8,6 +8,8 @@ and generates structured Verification Reports with full audit trails.
 from datetime import datetime, timezone
 import json
 import logging
+import shutil
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -158,47 +160,85 @@ class RepairLoopOrchestrator:
             "removed": proposal.diff.removed_count,
         })
 
-        # 2. Automatically apply patch in session for verification if applicable
+        # 2. Test candidate patch in an isolated temporary copy of the repository
+        # This guarantees candidate patches never mutate original source files without explicit approval.
+        test_status = "error"
+        test_stdout = ""
+        failure_traceback = None
+
         if proposal.diff.is_applicable:
-            try:
-                self.patch_engine.approve_and_apply_patch(repo_root, proposal.patch_id)
-                session.add_audit("patch_applied", {"version": version_label, "patch_id": proposal.patch_id})
-            except Exception as e:
-                session.add_audit("patch_apply_warning", {"version": version_label, "error": str(e)})
+            with tempfile.TemporaryDirectory(prefix="repopilot_repair_") as temp_dir_str:
+                temp_repo = Path(temp_dir_str)
+                # Copy repository contents into isolated workspace, omitting large/unrelated artifacts
+                shutil.copytree(
+                    repo_root,
+                    temp_repo,
+                    dirs_exist_ok=True,
+                    ignore=shutil.ignore_patterns(
+                        ".git", ".venv", "venv", "__pycache__", "node_modules", ".pytest_cache"
+                    ),
+                )
+
+                try:
+                    # Apply candidate patch inside isolated temporary workspace
+                    self.patch_engine.approve_and_apply_patch(temp_repo, proposal.patch_id)
+                    session.add_audit("candidate_patch_tested_in_isolation", {
+                        "version": version_label,
+                        "patch_id": proposal.patch_id,
+                        "isolated_env": True,
+                    })
+
+                    # Execute regression test inside isolated temporary workspace
+                    test_req = RunTestRequest(
+                        repo_id=session.repo_id,
+                        test_target=session.test_target,
+                        timeout_seconds=20,
+                    )
+                    test_res = self.test_runner.execute_test(temp_repo, test_req)
+                    test_status = test_res.status
+                    test_stdout = test_res.stdout
+                    failure_traceback = test_res.failure_traceback
+
+                    session.add_audit("tests_executed", {
+                        "version": version_label,
+                        "status": test_res.status,
+                        "passed": test_res.passed_count,
+                        "failed": test_res.failed_count,
+                        "isolated_env": True,
+                    })
+                except Exception as e:
+                    test_status = "error"
+                    test_stdout = str(e)
+                    session.add_audit("isolated_test_error", {
+                        "version": version_label,
+                        "error": str(e),
+                    })
+                # Temporary directory automatically and safely cleaned up on exit
         else:
-            session.add_audit("patch_skipped", {"version": version_label, "reason": proposal.diff.validation_error})
-
-        # 3. Run regression test
-
-        test_req = RunTestRequest(
-            repo_id=session.repo_id,
-            test_target=session.test_target,
-            timeout_seconds=20,
-        )
-        test_res = self.test_runner.execute_test(repo_root, test_req)
-
-        session.add_audit("tests_executed", {
-            "status": test_res.status,
-            "passed": test_res.passed_count,
-            "failed": test_res.failed_count,
-        })
+            session.add_audit("patch_skipped", {
+                "version": version_label,
+                "reason": proposal.diff.validation_error or "Patch not applicable",
+            })
 
         iteration_rec = RepairIteration(
             iteration_number=iteration_num,
             patch_id=proposal.patch_id,
             version=version_label,
             patch_explanation=proposal.explanation,
-            test_status=test_res.status,
-            test_stdout=test_res.stdout,
-            failure_traceback=test_res.failure_traceback,
+            test_status=test_status,
+            test_stdout=test_stdout,
+            failure_traceback=failure_traceback,
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
         session.iterations.append(iteration_rec)
 
-        if test_res.status == "passed":
+        if test_status == "passed":
             session.status = "verified"
-            session.final_verdict = f"Successfully repaired and verified on attempt {version_label}."
-            session.add_audit("session_verified", {"attempt": version_label})
+            session.final_verdict = (
+                f"Candidate patch {version_label} successfully passed all tests in isolated sandbox. "
+                f"Ready for explicit user review and approval."
+            )
+            session.add_audit("session_verified", {"attempt": version_label, "patch_id": proposal.patch_id})
         elif session.current_iteration >= session.max_iterations:
             session.status = "max_iterations_reached"
             session.final_verdict = f"Repair loop completed maximum {session.max_iterations} attempts without passing all tests."
@@ -208,6 +248,36 @@ class RepairLoopOrchestrator:
             session.final_verdict = f"Attempt {version_label} failed. Ready for final bounded iteration."
 
         return self._session_to_response(session)
+
+    def apply_verified_repair(self, repo_root: Path, session_id: str, patch_id: Optional[str] = None):
+        """
+        Explicitly applies a verified patch from a repair session to the original repository
+        following explicit user review and approval.
+        """
+        if session_id not in self.sessions:
+            raise KeyError(f"Repair session not found: {session_id}")
+
+        session = self.sessions[session_id]
+        target_patch_id = patch_id
+        if not target_patch_id:
+            # Find the last passed iteration patch
+            for it in reversed(session.iterations):
+                if it.test_status == "passed" and it.patch_id:
+                    target_patch_id = it.patch_id
+                    break
+
+        if not target_patch_id and session.iterations:
+            target_patch_id = session.iterations[-1].patch_id
+
+        if not target_patch_id:
+            raise ValueError(f"No candidate patch available to apply for session {session_id}")
+
+        applied = self.patch_engine.approve_and_apply_patch(repo_root, target_patch_id)
+        session.add_audit("repair_applied_to_repository", {
+            "patch_id": target_patch_id,
+            "status": applied.status,
+        })
+        return applied
 
     def generate_verification_report(self, session_id: str) -> VerificationReportResponse:
         """

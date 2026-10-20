@@ -79,7 +79,9 @@ ollama run gemma4:latest
 ```powershell
 # In RepoPilot root:
 $env:PYTHONPATH="backend"
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+# Optional: customize CORS origins (defaults to localhost:5173, 127.0.0.1:5173, localhost:3000)
+# $env:REPO_PILOT_CORS_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 API Docs: `http://localhost:8000/docs`
 
@@ -87,28 +89,47 @@ API Docs: `http://localhost:8000/docs`
 ```powershell
 cd frontend
 npm install
+# Optional: customize backend API URL (defaults to http://localhost:8000/api)
+# $env:VITE_API_URL="http://localhost:8000/api"
 npm run dev
 ```
 Open `http://localhost:5173` in your browser.
 
 ---
 
+## 🔒 Security Architecture & Boundaries
+
+### 1. Workspace Boundary Validation vs. OS-Level Sandbox
+- **Path Resolution:** All target filepaths and test targets are resolved through `resolve_safe_path()`, preventing directory traversal across both Windows (`..\\`, `C:`, UNC shares) and POSIX (`../`, `/etc/`).
+- **Subprocess Execution Limitation:** `pytest` is executed within the designated repository directory with strict timeouts (default 30s) and stdout/stderr truncation (64KB). **Important:** Running pytest executes Python code directly. A subprocess runner is **not an OS-level sandbox** or container; Python tests can execute arbitrary system calls. RepoPilot is designed for **trusted local repositories** only. It should **not** be exposed as a public unauthenticated web service.
+
+### 2. Patch Approval & Mutation Safety
+- **Manual Patch Workflow:** Candidate diffs are previewed in the Patch Review UI. Original source files remain untouched until explicit developer approval (`POST /api/patches/{patch_id}/approve`).
+- **Automated Repair Workflow:** During multi-turn repair sessions (`/api/repair/{session_id}/iterate`), candidate fixes are tested strictly inside an **isolated temporary directory clone**. The original repository is never modified silently. Once a candidate passes all tests, the developer reviews the diff and explicitly applies the fix (`POST /api/repair/{session_id}/apply` or UI Approve).
+- **Conflict Detection:** If the target source file has been modified externally since patch proposal generation, application is rejected with a conflict error.
+
+### 3. API Exposure & CORS
+- The backend restricts allowed origins to `REPO_PILOT_CORS_ORIGINS` (defaulting to local Vite dev servers: `http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000`).
+- Credentials are supported with explicit origin validation.
+
+---
+
 ## 🧪 Running the Verification Test Suite
 
-RepoPilot includes 26 comprehensive unit, security, and integration tests across all phases:
+RepoPilot includes 28 comprehensive unit, security, and integration tests across all subsystems:
 
 ```powershell
 $env:PYTHONPATH="backend"
 python -m pytest backend/tests -v
 ```
 
-All 26 tests pass 100%:
-- `test_repository.py` (File tree, safe slicing, traversal prevention, lexical search)
+All 28 tests pass 100%:
+- `test_repository.py` (File tree, safe slicing, cross-platform traversal prevention, Windows drive & UNC blocking, lexical search)
 - `test_investigation.py` (Evidence extraction, mock & live inference schemas)
 - `test_llm.py` (Ollama provider options, truncation safeguards, error diagnostics)
 - `test_patcher.py` (Unified diffs, approval workflow, conflict detection, investigation-to-patch pipeline, logic validation)
-- `test_runner.py` (Subprocess timeout caps, output bounds, pytest summary parser)
-- `test_repair.py` (Bounded retry ceiling, audit logging, Markdown report synthesis)
+- `test_runner.py` (Subprocess timeout caps, output bounds, test target traversal defense, pytest summary parser)
+- `test_repair.py` (Isolated candidate sandbox testing, repo preservation, explicit approval apply, rejected patch safety, bounded retry ceiling, audit logging)
 
 ---
 

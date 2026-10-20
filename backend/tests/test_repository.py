@@ -12,18 +12,36 @@ SAMPLE_REPO_DIR = Path(__file__).resolve().parent.parent.parent / "benchmarks" /
 
 
 def test_security_path_traversal_detection():
-    # Trying to escape SAMPLE_REPO_DIR
+    # Trying to escape SAMPLE_REPO_DIR via POSIX relative traversal
     with pytest.raises(SecurityException):
         resolve_safe_path(SAMPLE_REPO_DIR, "../../../Windows/System32/drivers/etc/hosts")
 
+    # Trying to escape via Windows-style relative traversal
     with pytest.raises(SecurityException):
         resolve_safe_path(SAMPLE_REPO_DIR, "..\\..\\sensitive.txt")
+
+    # Absolute Unix root path
+    with pytest.raises(SecurityException):
+        resolve_safe_path(SAMPLE_REPO_DIR, "/etc/passwd")
+
+    # Windows drive root path outside repository
+    with pytest.raises(SecurityException):
+        resolve_safe_path(SAMPLE_REPO_DIR, "C:\\Windows\\System32\\cmd.exe")
+
+    # UNC share path
+    with pytest.raises(SecurityException):
+        resolve_safe_path(SAMPLE_REPO_DIR, "\\\\attacker-share\\payload.py")
 
 
 def test_security_valid_path():
     valid = resolve_safe_path(SAMPLE_REPO_DIR, "expense.py")
     assert valid.exists()
     assert valid.name == "expense.py"
+
+    # Legitimate relative path
+    valid_test = resolve_safe_path(SAMPLE_REPO_DIR, "./test_expense.py")
+    assert valid_test.exists()
+    assert valid_test.name == "test_expense.py"
 
 
 def test_repo_metadata_detection():

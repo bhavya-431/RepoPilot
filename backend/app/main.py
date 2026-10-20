@@ -4,6 +4,7 @@ Provides endpoints for repository management, file tree exploration,
 source preview with line numbers, and lexical search.
 """
 
+import os
 from pathlib import Path
 import uuid
 from typing import Dict, List, Optional
@@ -62,10 +63,16 @@ repair_orchestrator = RepairLoopOrchestrator(
 
 
 
-# Enable CORS for local development
+# Enable CORS: configurable via REPO_PILOT_CORS_ORIGINS (comma-separated), with safe localhost defaults
+cors_origins_env = os.getenv(
+    "REPO_PILOT_CORS_ORIGINS",
+    "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
+)
+allowed_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -247,6 +254,32 @@ def execute_repair_iteration(session_id: str, feedback: Optional[str] = None):
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Repair iteration failed: {str(e)}")
+
+
+@app.post("/api/repair/{session_id}/apply", response_model=PatchProposalResponse)
+def apply_repair_proposal(session_id: str, patch_id: Optional[str] = None):
+    """
+    Explicitly approve and apply a verified repair proposal to the repository source files.
+    Ensures changes are applied only following explicit user authorization.
+    """
+    if session_id not in repair_orchestrator.sessions:
+        raise HTTPException(status_code=404, detail="Repair session not found")
+
+    session = repair_orchestrator.sessions[session_id]
+    if session.repo_id not in REPO_REGISTRY:
+        raise HTTPException(status_code=404, detail="Associated repository not found")
+
+    repo = REPO_REGISTRY[session.repo_id]
+    try:
+        result = repair_orchestrator.apply_verified_repair(
+            repo_root=Path(repo.root_path),
+            session_id=session_id,
+            patch_id=patch_id,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to apply repair patch: {str(e)}")
+
 
 
 @app.get("/api/repair/{session_id}/report", response_model=VerificationReportResponse)

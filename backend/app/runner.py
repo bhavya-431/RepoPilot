@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from app.schemas import RunTestRequest, TestExecutionResponse
+from app.security import resolve_safe_path, SecurityException
 
 # Maximum captured stdout/stderr bytes
 MAX_OUTPUT_BYTES = 64 * 1024
@@ -78,18 +79,19 @@ class TestRunner:
         # Construct strictly controlled pytest command
         cmd = ["python", "-m", "pytest"]
 
-        # If a specific test target is given, sanitize it strictly
+        # If a specific test target is given, sanitize and validate strictly within repository boundaries
         if req.test_target:
-            clean_target = req.test_target.strip().replace("..", "").replace(";", "").replace("&", "")
-            # Verify file exists inside repo
-            target_path = (repo_root / clean_target).resolve()
+            raw_target = req.test_target.strip().replace(";", "").replace("&", "")
+            try:
+                target_path = resolve_safe_path(repo_root, raw_target)
+            except SecurityException:
+                raise SecurityViolation("Test target path traversal detected.")
+
             if not target_path.exists():
                 raise FileNotFoundError(f"Test target does not exist: {req.test_target}")
-            try:
-                target_path.relative_to(repo_root.resolve())
-            except ValueError:
-                raise SecurityViolation("Test target path traversal detected.")
-            cmd.append(clean_target)
+
+            rel_target = target_path.relative_to(repo_root.resolve()).as_posix()
+            cmd.append(rel_target)
 
         # Set environment with repo_root in PYTHONPATH
         env = os.environ.copy()

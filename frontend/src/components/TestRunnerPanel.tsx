@@ -160,9 +160,11 @@ export function TestRunnerPanel({
       <div
         style={{
           flex: 1,
+          minHeight: 0,
           overflowY: 'auto',
           background: '#070a13',
           padding: '1rem 1.25rem 2rem 1.25rem',
+          boxSizing: 'border-box',
           fontFamily: 'var(--font-mono)',
           fontSize: '0.8rem',
           lineHeight: 1.5,

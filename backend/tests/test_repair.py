@@ -74,6 +74,11 @@ def test_bounded_repair_loop_success_and_audit(disposable_repo):
     assert it1_data["current_iteration"] == 1
     assert it1_data["status"] == "verified"  # Mock provider generates fix that satisfies test_expense.py
 
+    # Verify that during candidate testing, original repository file remained completely untouched!
+    original_code_still = (repo_dir / "expense.py").read_text(encoding="utf-8")
+    assert "Missing zero check!" in original_code_still
+    assert "participant_count <= 0" not in original_code_still
+
     # 3. Request Verification Report
     report_resp = client.get(f"/api/repair/{session_id}/report")
     assert report_resp.status_code == 200
@@ -84,6 +89,60 @@ def test_bounded_repair_loop_success_and_audit(disposable_repo):
     assert len(report["audit_events"]) >= 3
     assert "# RepoPilot Verification & Audit Report" in report["markdown_report"]
     assert "✅ PASSED" in report["markdown_report"]
+
+    # 4. Explicitly apply the verified patch and verify original repository is now updated
+    apply_resp = client.post(f"/api/repair/{session_id}/apply")
+    assert apply_resp.status_code == 200
+    assert apply_resp.json()["status"] == "applied"
+
+    updated_code = (repo_dir / "expense.py").read_text(encoding="utf-8")
+    assert "participant_count <= 0" in updated_code
+
+
+def test_rejected_patch_preserves_original_source(disposable_repo):
+    repo_dir, repo_id = disposable_repo
+    original_code = (repo_dir / "expense.py").read_text(encoding="utf-8")
+
+    # Generate patch
+    req = {
+        "repo_id": repo_id,
+        "target_file": "expense.py",
+        "issue_description": "calculate_expense_share crashes on zero",
+        "suggested_fix": "Add check for participant_count <= 0",
+    }
+    gen_resp = client.post("/api/patches/generate", json=req)
+    patch_id = gen_resp.json()["patch_id"]
+
+    # Reject patch
+    rej_resp = client.post(f"/api/patches/{patch_id}/reject", json={"patch_id": patch_id, "reason": "User rejected"})
+    assert rej_resp.status_code == 200
+    assert rej_resp.json()["status"] == "rejected"
+
+    # Source code must remain completely untouched
+    assert (repo_dir / "expense.py").read_text(encoding="utf-8") == original_code
+
+
+def test_failed_patch_application_safety(disposable_repo):
+    repo_dir, repo_id = disposable_repo
+    original_code = (repo_dir / "expense.py").read_text(encoding="utf-8")
+
+    # Modifying file externally causes conflict on approve
+    gen_resp = client.post("/api/patches/generate", json={
+        "repo_id": repo_id,
+        "target_file": "expense.py",
+        "issue_description": "zero division",
+        "suggested_fix": "check <= 0",
+    })
+    patch_id = gen_resp.json()["patch_id"]
+
+    # External modification
+    (repo_dir / "expense.py").write_text(original_code + "\n# external change\n", encoding="utf-8")
+
+    # Approval should fail due to conflict and leave external file intact without corrupting
+    app_resp = client.post(f"/api/patches/{patch_id}/approve")
+    assert app_resp.status_code == 400
+    assert "conflict" in app_resp.json()["detail"].lower()
+    assert (repo_dir / "expense.py").read_text(encoding="utf-8") == original_code + "\n# external change\n"
 
 
 def test_repair_loop_halts_strictly_at_max_iterations(tmp_path):

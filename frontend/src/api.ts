@@ -78,7 +78,13 @@ export interface SystemStatus {
   active_model: string;
 }
 
-const API_BASE = 'http://localhost:8000/api';
+// Configurable via VITE_API_URL (e.g. 'http://localhost:8000/api' or 'http://localhost:8000')
+const rawEnvUrl = import.meta.env.VITE_API_URL?.trim();
+export const API_BASE = rawEnvUrl
+  ? (rawEnvUrl.endsWith('/api') ? rawEnvUrl : `${rawEnvUrl.replace(/\/+$/, '')}/api`)
+  : 'http://localhost:8000/api';
+
+export const BACKEND_ROOT = API_BASE.replace(/\/api\/?$/, '');
 
 export const api = {
   async getSystemStatus(): Promise<SystemStatus> {

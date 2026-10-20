@@ -252,7 +252,7 @@ export function DiffViewer({
       )}
 
       {/* Unified Diff Content View */}
-      <div style={{ flex: 1, overflowY: 'auto', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', padding: '0.75rem 0 1.5rem 0' }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', padding: '0.75rem 0 2rem 0', boxSizing: 'border-box' }}>
         {lines.map((line, idx) => {
           let lineBg = 'transparent';
           let textColor = '#e2e8f0';
