@@ -238,3 +238,19 @@ Start the API:
 
 ```powershell
 uvicorn app.main:app --host 127
+
+
+
+## Application Screenshots
+
+### 1. Bug Investigation
+![Bug Investigation](screenshots/01-bug-investigation.png)
+
+### 2. Patch Review and Approval
+![Patch Review](screenshots/02-patch-review.png)
+
+### 3. Test Verification
+![Test Verification](screenshots/03-test-verification.png)
+
+### 4. Repair Audit
+![Repair Audit](screenshots/04-repair-audit.png)
