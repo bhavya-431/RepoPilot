@@ -236,10 +236,10 @@ $env:REPO_PILOT_CORS_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
 
 Start the API:
 
+
 ```powershell
-uvicorn app.main:app --host 127
-
-
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
 
 ## Application Screenshots
 
